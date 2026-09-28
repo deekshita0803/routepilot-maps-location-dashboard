@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const quickPlaces = [
   "SRM University AP",
@@ -18,173 +18,96 @@ export default function SearchPanel({
   recentSearches,
   onRecentSelect,
 }) {
-  const [focused, setFocused] =
-    useState(false);
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef(null);
 
   /*
-   * =========================
-   * DYNAMIC SEARCH
-   * =========================
+   * Dynamic search:
+   * Search automatically while the user types.
    *
-   * Search automatically while typing.
+   * The small delay prevents sending a request for every
+   * single keystroke.
    */
   useEffect(() => {
-    if (!focused) {
-      return;
-    }
+    const value = query.trim();
 
-    /*
-     * IMPORTANT:
-     * Use the original query.
-     * Do not modify it.
-     */
-    const value = query;
-
-    /*
-     * Don't search for one character.
-     */
-    if (value.trim().length < 2) {
-      return;
-    }
-
-    /*
-     * If the user just pressed SPACE,
-     * wait for the next word.
-     *
-     * Example:
-     *
-     * "durga "
-     *
-     * remains exactly "durga "
-     * inside the input.
-     */
-    if (value.endsWith(" ")) {
+    if (!focused || !value) {
       return;
     }
 
     const timer = setTimeout(() => {
       onSearch(value);
-    }, 600);
+    }, 450);
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [
-    query,
-    focused,
-    onSearch,
-  ]);
+    return () => clearTimeout(timer);
+  }, [query, focused, onSearch]);
 
   /*
-   * =========================
-   * KEYBOARD
-   * =========================
+   * Enter key searches immediately.
+   *
+   * Spacebar is NOT captured here.
+   * Therefore normal spaces work correctly.
    */
+  useEffect(() => {
+    const input = inputRef.current;
 
-  const handleKeyDown = (
-    event
-  ) => {
-    /*
-     * ENTER = search.
-     */
-    if (event.key === "Enter") {
-      event.preventDefault();
-
-      if (query.trim()) {
-        onSearch(query);
-      }
-
+    if (!input) {
       return;
     }
 
-    /*
-     * IMPORTANT:
-     *
-     * There is intentionally
-     * NO SPACE handling here.
-     *
-     * Spacebar is handled naturally
-     * by the browser input.
-     */
-  };
+    const handleKeyDown = (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onSearch();
+      }
+    };
+
+    input.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      input.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onSearch]);
 
   return (
     <section className="search-panel">
       <div className="search-input-wrap">
-        <span className="search-icon">
-          ⌕
-        </span>
+        <span className="search-icon">⌕</span>
 
         <input
-          type="text"
-          value={query}
+          ref={inputRef}
           aria-label="Search destination"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setFocused(true)}
           placeholder="Search nearby places, addresses or landmarks"
           autoComplete="off"
-          spellCheck={false}
-          onFocus={() =>
-            setFocused(true)
-          }
-          onChange={(event) => {
-            /*
-             * IMPORTANT:
-             *
-             * Store the EXACT value.
-             *
-             * DO NOT use:
-             *
-             * event.target.value.trim()
-             *
-             * because that would break
-             * spaces while typing.
-             */
-            setQuery(
-              event.target.value
-            );
-
-            setFocused(true);
-          }}
-          onKeyDown={
-            handleKeyDown
-          }
         />
 
         {query && (
           <button
-            type="button"
             className="clear-input"
             onClick={() => {
               setQuery("");
               setFocused(true);
+              inputRef.current?.focus();
             }}
             aria-label="Clear search"
+            type="button"
           >
             ×
           </button>
         )}
 
         <button
-          type="button"
           className="search-btn"
-          disabled={
-            searching ||
-            !query.trim()
-          }
-          onClick={() => {
-            if (query.trim()) {
-              onSearch(query);
-            }
-          }}
+          onClick={() => onSearch()}
+          disabled={searching}
+          type="button"
         >
-          {searching
-            ? "..."
-            : "Search"}
+          {searching ? "..." : "Search"}
         </button>
       </div>
-
-      {/* =========================
-          QUICK DESTINATIONS
-      ========================= */}
 
       {focused && !query && (
         <div className="suggestion-area">
@@ -193,152 +116,99 @@ export default function SearchPanel({
           </div>
 
           <div className="quick-grid">
-            {quickPlaces.map(
-              (place) => (
-                <button
-                  type="button"
-                  key={place}
-                  onClick={() => {
-                    setQuery(place);
-                    setFocused(false);
-                    onSearch(place);
-                  }}
-                >
-                  {place}
-                </button>
-              )
-            )}
+            {quickPlaces.map((place) => (
+              <button
+                key={place}
+                type="button"
+                onClick={() => {
+                  setQuery(place);
+                  setFocused(true);
+                  onSearch(place);
+                }}
+              >
+                {place}
+              </button>
+            ))}
           </div>
 
-          {recentSearches.length >
-            0 && (
+          {recentSearches.length > 0 && (
             <>
               <div className="suggestion-title recent-title">
                 Recent searches
               </div>
 
               <div className="recent-list">
-                {recentSearches
-                  .slice(0, 5)
-                  .map((place) => (
-                    <button
-                      type="button"
-                      key={place.id}
-                      onClick={() => {
-                        setFocused(
-                          false
-                        );
+                {recentSearches.slice(0, 5).map((place) => (
+                  <button
+                    key={place.id}
+                    type="button"
+                    onClick={() => {
+                      setFocused(false);
+                      onRecentSelect(place);
+                    }}
+                  >
+                    <span>↗</span>
 
-                        onRecentSelect(
-                          place
-                        );
-                      }}
-                    >
-                      <span>↗</span>
-
-                      <span>
-                        <strong>
-                          {
-                            place.name
-                          }
-                        </strong>
-
-                        <small>
-                          {
-                            place.label
-                          }
-                        </small>
-                      </span>
-                    </button>
-                  ))}
+                    <span>
+                      <strong>{place.name}</strong>
+                      <small>{place.label}</small>
+                    </span>
+                  </button>
+                ))}
               </div>
             </>
           )}
         </div>
       )}
 
-      {/* =========================
-          SEARCH RESULTS
-      ========================= */}
+      {focused && query && (
+        <div className="results-panel">
+          {searching && (
+            <div className="empty-state">
+              Searching nearby and other relevant locations...
+            </div>
+          )}
 
-      {focused &&
-        query.trim().length >=
-          2 && (
-          <div className="results-panel">
-            {searching && (
-              <div className="empty-state">
-                Searching...
-              </div>
-            )}
+          {!searching && results.length === 0 && (
+            <div className="empty-state">
+              No locations found. Try a place, landmark or full address.
+            </div>
+          )}
 
-            {!searching &&
-              results.length > 0 &&
-              results.map(
-                (result) => (
-                  <button
-                    type="button"
-                    className="result-row"
-                    key={result.id}
-                    onClick={() => {
-                      setFocused(
-                        false
-                      );
+          {!searching &&
+            results.map((result) => (
+              <button
+                className="result-row"
+                key={result.id}
+                type="button"
+                onClick={() => {
+                  setFocused(false);
+                  onSelect(result);
+                }}
+              >
+                <span className="result-pin">●</span>
 
-                      onSelect(
-                        result
-                      );
-                    }}
-                  >
-                    <span className="result-pin">
-                      ●
+                <span className="result-text">
+                  <strong>{result.name}</strong>
+                  <small>{result.label}</small>
+                </span>
+
+                {result.distanceKm !== null &&
+                  result.distanceKm !== undefined && (
+                    <span className="result-distance">
+                      {result.distanceKm < 1
+                        ? `${Math.round(
+                            result.distanceKm * 1000
+                          )} m`
+                        : `${result.distanceKm.toFixed(1)} km`}
                     </span>
+                  )}
 
-                    <span className="result-text">
-                      <strong>
-                        {
-                          result.name
-                        }
-                      </strong>
-
-                      <small>
-                        {
-                          result.label
-                        }
-                      </small>
-                    </span>
-
-                    {result.distanceKm !=
-                      null && (
-                      <span className="result-distance">
-                        {result.distanceKm <
-                        1
-                          ? `${Math.round(
-                              result.distanceKm *
-                                1000
-                            )} m`
-                          : `${result.distanceKm.toFixed(
-                              1
-                            )} km`}
-                      </span>
-                    )}
-
-                    <span className="result-arrow">
-                      ›
-                    </span>
-                  </button>
-                )
-              )}
-
-            {!searching &&
-              results.length ===
-                0 && (
-                <div className="empty-state">
-                  No matching locations
-                  found.
-                </div>
-              )}
-          </div>
-        )}
+                <span className="result-arrow">›</span>
+              </button>
+            ))}
+        </div>
+      )}
     </section>
   );
 }
